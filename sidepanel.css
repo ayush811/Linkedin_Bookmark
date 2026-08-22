@@ -1,0 +1,317 @@
+:root {
+  --paper: #ffffff;
+  --shell: #f6f5f2;
+  --line: #e4e2dc;
+  --line-strong: #cfccc4;
+  --ink: #21201d;
+  --ink-2: #5f5d57;
+  --ink-3: #8f8d86;
+  --accent: #4b46a8;
+  --accent-bg: #efeef9;
+  --amber: #c9821a;
+  --green: #4f8a2b;
+  --gray-dot: #a8a59d;
+  --danger: #b4432c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1c1b19;
+    --shell: #141312;
+    --line: #33312d;
+    --line-strong: #47443f;
+    --ink: #edebe6;
+    --ink-2: #a4a19a;
+    --ink-3: #7a776f;
+    --accent: #a49fea;
+    --accent-bg: #2a2745;
+    --amber: #d9a04b;
+    --green: #86b95f;
+    --gray-dot: #6b6862;
+    --danger: #e0806a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--shell);
+  color: var(--ink);
+  font: 400 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 11px 13px 10px;
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.count {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.icon-btn {
+  font: 500 10.5px/1 inherit;
+  letter-spacing: 0.04em;
+  padding: 5px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+#search {
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--shell);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+}
+
+#search:focus {
+  border-color: var(--accent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.chip {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.chip.on {
+  background: var(--accent-bg);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+/* Status filters carry the same colour as the row stripe, so the two read as
+ * one system rather than two unrelated encodings. */
+#status-chips:empty {
+  display: none;
+}
+
+#status-chips + .chips {
+  margin-top: 5px;
+}
+
+.chip.status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
+.chip.status[data-status="to-message"]::before { background: var(--gray-dot); }
+.chip.status[data-status="messaged"]::before { background: var(--amber); }
+.chip.status[data-status="replied"]::before { background: var(--green); }
+
+.list {
+  display: block;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 11px 13px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--shell);
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status stripe down the left edge. The button is 12px wide so it is easy to
+ * hit, but padding plus background-clip mean only 4px of colour shows. */
+.stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  padding: 0 8px 0 0;
+  border: none;
+  border-radius: 0;
+  background-clip: content-box;
+  cursor: pointer;
+}
+
+.stripe:hover {
+  opacity: 0.7;
+}
+
+.stripe[data-status="to-message"] { background-color: var(--gray-dot); }
+.stripe[data-status="messaged"] { background-color: var(--amber); }
+.stripe[data-status="replied"] { background-color: var(--green); }
+
+.job {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.edu {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.note {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 5px;
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  opacity: 0;
+}
+
+.row:hover .actions,
+.row:focus-within .actions {
+  opacity: 1;
+}
+
+.mini {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 20px;
+}
+
+.mini:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.mini.danger {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.mini.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+
+.empty {
+  padding: 28px 22px;
+  color: var(--ink-3);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.6;
+}

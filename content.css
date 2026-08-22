@@ -1,0 +1,65 @@
+#lib-save-btn {
+  position: absolute;
+  z-index: 2147483646;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d8d5cf;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #4b4a46;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  transition: color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+#lib-save-btn.lib-visible {
+  display: flex;
+}
+
+#lib-save-btn:hover {
+  border-color: #4b46a8;
+  color: #4b46a8;
+}
+
+#lib-save-btn:active {
+  transform: scale(0.92);
+}
+
+#lib-save-btn.lib-saved {
+  color: #4b46a8;
+  border-color: #c6c3ec;
+  background: #f0eff9;
+}
+
+#lib-toast {
+  position: fixed;
+  z-index: 2147483647;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%) translateY(8px);
+  padding: 9px 15px;
+  border-radius: 8px;
+  background: #22211f;
+  color: #f7f6f3;
+  font: 400 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+#lib-toast.lib-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #lib-save-btn,
+  #lib-toast {
+    transition: none;
+  }
+}

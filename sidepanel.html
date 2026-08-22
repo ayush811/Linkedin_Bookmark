@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LinkedIn Bookmarks</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-row">
+        <h1>Saved</h1>
+        <span class="count" id="count">0</span>
+        <div class="spacer"></div>
+        <button id="export-json" class="icon-btn" title="Download JSON">JSON</button>
+        <button id="export-csv" class="icon-btn" title="Download CSV">CSV</button>
+      </div>
+      <input id="search" type="search" placeholder="Search name, company, note" autocomplete="off" />
+      <div class="chips" id="status-chips"></div>
+      <div class="chips" id="chips"></div>
+    </header>
+
+    <main id="list" class="list"></main>
+
+    <p class="empty" id="empty" hidden>
+      Nothing saved yet. Hover any name on LinkedIn and click the bookmark button that appears.
+    </p>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
