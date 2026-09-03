@@ -36,6 +36,19 @@
   background: #f0eff9;
 }
 
+/* Companies get their own colour, so you can tell at a glance whether you are
+ * about to save a person or an organisation. */
+#lib-save-btn.lib-company:hover {
+  border-color: #176b57;
+  color: #176b57;
+}
+
+#lib-save-btn.lib-company.lib-saved {
+  color: #176b57;
+  border-color: #a8d2c6;
+  background: #eef7f4;
+}
+
 #lib-toast {
   position: fixed;
   z-index: 2147483647;

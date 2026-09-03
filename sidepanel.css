@@ -67,10 +67,40 @@ h1 {
   letter-spacing: -0.01em;
 }
 
-.count {
-  font-size: 12px;
+/* ---------- People / Companies tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 11px 7px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   color: var(--ink-3);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--ink-2);
+}
+
+.tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-count {
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
 .spacer {
@@ -174,6 +204,13 @@ h1 {
   background: var(--shell);
 }
 
+/* Company logos are square artwork; circles crop them badly. */
+.avatar.square {
+  border-radius: 7px;
+  object-fit: contain;
+  background: var(--shell);
+}
+
 .avatar {
   width: 40px;
   height: 40px;
@@ -226,23 +263,35 @@ h1 {
 .stripe[data-status="messaged"] { background-color: var(--amber); }
 .stripe[data-status="replied"] { background-color: var(--green); }
 
+/* Everything read off LinkedIn stays on one line and truncates. A long job
+ * title must never wrap and shove the employer out of view. */
+.job,
+.org,
+.edu {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
 .job {
   font-size: 12px;
   color: var(--ink-2);
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+}
+
+/* The employer gets its own line, because it is usually what you are scanning
+ * for and it used to be pushed off the end by long titles. */
+.org {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 500;
+  margin-top: 1px;
 }
 
 .edu {
   font-size: 11.5px;
   color: var(--ink-3);
   margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .tags {
@@ -260,11 +309,15 @@ h1 {
   color: var(--accent);
 }
 
+/* Your own writing, in the accent colour, like the tags. Grey is everything
+ * LinkedIn told us; colour is everything you added. */
 .note {
   font-size: 11.5px;
-  color: var(--ink-2);
-  margin-top: 5px;
-  font-style: italic;
+  color: var(--accent);
+  margin-top: 6px;
+  padding-left: 7px;
+  border-left: 2px solid var(--accent);
+  line-height: 1.4;
 }
 
 .actions {

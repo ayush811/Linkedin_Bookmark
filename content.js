@@ -1,24 +1,44 @@
 /*
  * Injects a single floating bookmark button that follows the cursor.
- * Hover any link pointing at /in/<slug> anywhere on LinkedIn, click to save.
+ * Hover any link pointing at /in/<slug> or /company/<slug> anywhere on
+ * LinkedIn, click to save.
  *
  * Design note: there is deliberately no per-layout injection and no
  * MutationObserver. One delegated mouseover listener on the document covers
  * search results, feed comments, notifications, hover cards, messaging and
  * any surface LinkedIn ships in future, because all of them ultimately render
- * an <a href="/in/...">.
+ * an <a href="/in/..."> or an <a href="/company/...">.
+ *
+ * People and companies live in two separate storage keys. Keeping them apart
+ * means a company can never collide with a person who happens to share a slug,
+ * and it means adding companies could not disturb the people already saved.
  */
 
-const STORE_KEY = "bookmarks";
+const PEOPLE_KEY = "bookmarks";
+const COMPANY_KEY = "companies";
 const BTN_ID = "lib-save-btn";
+
+const keyFor = (kind) => (kind === "company" ? COMPANY_KEY : PEOPLE_KEY);
+
+/* Fields read off the page, per kind. On a re-save these refresh, but only
+ * where the new read actually found something: saving from the feed must never
+ * wipe the richer data a full page collected. Everything not listed here
+ * (savedAt, savedTs, source, note, tags, status) belongs to the user and is
+ * never touched by a re-save. */
+const SCRAPED = {
+  person: ["name", "headline", "company", "position", "education", "photo"],
+  company: ["name", "industry", "location", "size", "about", "photo"]
+};
 
 let btn = null;
 let toast = null;
 let activeAnchor = null;
-let activeSlug = null;
+let activeTarget = null; // { kind, slug }
 let hideTimer = null;
-let savedSlugs = new Set();
+let savedKeys = new Set(); // "person:some-slug" / "company:some-slug"
 let urlWatch = null;
+
+const idOf = (kind, slug) => kind + ":" + slug;
 
 /* ---------- staying alive ----------
  * Reloading an unpacked extension orphans the copy of this script already
@@ -47,48 +67,51 @@ function shutdown() {
 
 /* ---------- storage ---------- */
 
-async function readAll() {
-  const res = await chrome.storage.local.get(STORE_KEY);
-  return res[STORE_KEY] || {};
+async function readAll(kind) {
+  const key = keyFor(kind);
+  const res = await chrome.storage.local.get(key);
+  return res[key] || {};
 }
 
-/* Fields read off the page. On a re-save these refresh, but only when the new
- * read actually found something: saving someone from the feed must never wipe
- * the richer data a profile-page save collected. Everything not listed here
- * (savedAt, savedTs, source, note, tags, status) belongs to the user and is
- * never touched by a re-save. */
-const SCRAPED = ["name", "headline", "company", "position", "education", "photo"];
-
-async function writeOne(record) {
-  const all = await readAll();
+async function writeOne(kind, record) {
+  const key = keyFor(kind);
+  const all = await readAll(kind);
   const existing = all[record.slug];
   if (!existing) {
     all[record.slug] = record;
   } else {
     const merged = { ...existing, url: record.url };
-    for (const key of SCRAPED) {
-      if (record[key] != null && record[key] !== "") merged[key] = record[key];
+    for (const field of SCRAPED[kind]) {
+      if (record[field] != null && record[field] !== "") merged[field] = record[field];
     }
     all[record.slug] = merged;
   }
-  await chrome.storage.local.set({ [STORE_KEY]: all });
+  await chrome.storage.local.set({ [key]: all });
   return !existing;
 }
 
-async function removeOne(slug) {
-  const all = await readAll();
+async function removeOne(kind, slug) {
+  const key = keyFor(kind);
+  const all = await readAll(kind);
   delete all[slug];
-  await chrome.storage.local.set({ [STORE_KEY]: all });
+  await chrome.storage.local.set({ [key]: all });
 }
 
 async function refreshSavedSet() {
   if (!contextAlive()) return;
-  savedSlugs = new Set(Object.keys(await readAll()));
+  const res = await chrome.storage.local.get([PEOPLE_KEY, COMPANY_KEY]);
+  const next = new Set();
+  for (const slug of Object.keys(res[PEOPLE_KEY] || {})) next.add(idOf("person", slug));
+  for (const slug of Object.keys(res[COMPANY_KEY] || {})) next.add(idOf("company", slug));
+  savedKeys = next;
 }
 
-/* ---------- slug parsing ---------- */
+/* ---------- link parsing ---------- */
 
-function slugFrom(href) {
+/* Works out what a link points at. Returns { kind, slug } or null. The host is
+ * checked properly first, so a link that merely contains the characters "/in/"
+ * somewhere is rejected. */
+function targetFrom(href) {
   if (!href) return null;
   let url;
   try {
@@ -97,16 +120,35 @@ function slugFrom(href) {
     return null;
   }
   if (!/(^|\.)linkedin\.com$/.test(url.hostname)) return null;
-  const m = url.pathname.match(/^\/in\/([^/]+)/);
+
+  const person = url.pathname.match(/^\/in\/([^/]+)/);
+  // LinkedIn uses /company/ for company pages and /school/ for universities;
+  // both behave the same way and both are worth bookmarking.
+  const company = url.pathname.match(/^\/(?:company|school)\/([^/]+)/);
+  const m = person || company;
   if (!m) return null;
+
   const slug = decodeURIComponent(m[1]).trim();
   if (slug.length < 2) return null;
-  return slug;
+  // A bare numeric slug is one of LinkedIn's internal ids, which appear on
+  // experience entries. They resolve, but they make a poor primary key.
+  return { kind: person ? "person" : "company", slug };
+}
+
+function slugFrom(href) {
+  const t = targetFrom(href);
+  return t && t.kind === "person" ? t.slug : null;
 }
 
 function profileUrl(slug) {
   return "https://www.linkedin.com/in/" + encodeURIComponent(slug) + "/";
 }
+
+function companyUrl(slug) {
+  return "https://www.linkedin.com/company/" + encodeURIComponent(slug) + "/";
+}
+
+const urlFor = (kind, slug) => (kind === "company" ? companyUrl(slug) : profileUrl(slug));
 
 /* ---------- data extraction ----------
  * Everything below is heuristic. LinkedIn class names rotate, so we lean on
@@ -128,7 +170,11 @@ const JUNK = /^(status is (online|offline|reachable)|·|\d+(st|nd|rd|th)|premium
 /* Feed and notification chrome that appears mid-line rather than at the start,
  * so the anchored JUNK test above never catches it. This is what produced
  * headlines like "Abhishek Shete follows this page". */
-const JUNK_ANY = /\b(follows this page|follows this|likes this|commented on|reposted this|shared this|is hiring|celebrat(es|ing))\b/i;
+const JUNK_ANY = /\b(follows? this page|follows this|likes this|commented on|reposted this|shared this|is hiring|celebrat(es|ing)|other connections?\b|connections? follow)\b/i;
+
+/* The tab strip across the top of a company page. These are navigation, not
+ * facts about the company, and they were being read as the industry. */
+const COMPANY_NAV = /^(home|about|posts|jobs|people|life|videos|events|products|services|insights|ads|my items|see all)$/i;
 
 /* The pronoun badge sits right beside the name on a profile, and "he/him" is
  * exactly six characters, so it survived the short-line check below and got
@@ -288,6 +334,122 @@ function extractFromProfilePage() {
   };
 }
 
+/* ---------- companies ---------- */
+
+/* A company page top card reads roughly:
+ *
+ *   Riwa Robotics
+ *   Building warehouse automation            <- tagline
+ *   Robotics Engineering · Navi Mumbai       <- industry · location
+ *   12,431 followers
+ *   51-200 employees
+ *
+ * Order varies, so each line is identified by what it contains rather than by
+ * where it sits. */
+const FOLLOWERS = /\bfollowers?\b/i;
+const EMPLOYEES = /\bemployees?\b/i;
+
+/* On a real company page the whole meta strip renders as ONE line of text:
+ *
+ *   "Technology, Information and Internet New York, NY 35K followers 51-200 employees"
+ *
+ * There is no separator to split on, so pull the two countable facts out by
+ * what they say, and treat whatever is left as the description of the company. */
+const SIZE_IN_LINE = /([\d][\d.,]*\s*[KkMm]?\+?(?:\s*[-–]\s*[\d][\d.,]*\s*[KkMm]?\+?)?)\s*employees/i;
+const FOLLOWERS_IN_LINE = /[\d][\d.,]*\s*[KkMm]?\+?\s*followers?/i;
+
+function sizeFromLine(line) {
+  const m = line && line.match(SIZE_IN_LINE);
+  return m ? m[1].replace(/\s+/g, "") + " employees" : null;
+}
+
+/* Strip the follower and employee counts, leaving the industry and location. */
+function metaWithoutCounts(line) {
+  return cleanLine(
+    (line || "")
+      .replace(SIZE_IN_LINE, " ")
+      .replace(FOLLOWERS_IN_LINE, " ")
+  ).replace(/[·•|]\s*$/, "").trim();
+}
+
+function companyLogo() {
+  const imgs = Array.from(document.querySelectorAll('main img[src*="licdn.com"]'))
+    .map((i) => i.src)
+    .filter((src) => src && !/ghost|anonymous/i.test(src));
+  return imgs.find((src) => /company-logo/i.test(src)) || imgs[0] || null;
+}
+
+function extractCompanyFromPage() {
+  const nameEl = document.querySelector("main h1") || document.querySelector("main h2");
+  const lines = textLines(nameEl && nameEl.closest("section"));
+
+  let name = cleanLine(nameEl && nameEl.innerText) || lines[0] || null;
+  if (!name) name = cleanLine((document.title || "").split("|")[0].split(" - ")[0]) || null;
+
+  const rest = lines.filter((l) => l !== name && !COMPANY_NAV.test(l));
+
+  // The employee count may sit on its own line or be buried in the meta strip.
+  const size = sizeFromLine(rest.find((l) => SIZE_IN_LINE.test(l)));
+
+  /* The industry and location come from one of two shapes:
+   *   "Motor Vehicle Manufacturing · Austin, Texas"     — its own line, dotted
+   *   "Software Development London, UK 93K followers …" — run together
+   * Prefer the dotted one when it exists, because it can be split exactly. */
+  const dotted = rest.find((l) => l.includes("·") && !FOLLOWERS.test(l) && !EMPLOYEES.test(l));
+  const countsLine = rest.find((l) => FOLLOWERS.test(l) || EMPLOYEES.test(l));
+  const meta = dotted || metaWithoutCounts(countsLine);
+
+  let industry = null;
+  let where = null;
+  if (meta && meta.includes("·")) {
+    const parts = meta.split("·").map((s) => s.trim()).filter(Boolean);
+    industry = parts[0] || null;
+    where = parts.slice(1).join(" · ") || null;
+  } else if (meta) {
+    // Run together with no separator, so keep it whole rather than guessing
+    // where the industry ends and the location begins. A wrong split reads
+    // worse than an honest combined line.
+    industry = meta;
+  }
+
+  // Whatever is left and long enough to be a sentence is the tagline.
+  const about =
+    rest.find(
+      (l) => l !== dotted && l !== countsLine && !FOLLOWERS.test(l) && !EMPLOYEES.test(l) && l.length > 20
+    ) || null;
+
+  if (!industry) {
+    industry =
+      rest.find(
+        (l) =>
+          l !== about && l !== dotted && l !== countsLine &&
+          !FOLLOWERS.test(l) && !EMPLOYEES.test(l) && l.length > 2
+      ) || null;
+  }
+
+  return { name, industry, location: where, size, about, photo: companyLogo() };
+}
+
+function extractCompanyFromCard(anchor) {
+  const card = findCard(anchor);
+  let name =
+    cleanLine(anchor.querySelector('span[aria-hidden="true"]')?.innerText) ||
+    cleanLine((anchor.innerText || "").split("\n")[0]) ||
+    cleanLine(anchor.getAttribute("aria-label"));
+  if (looksLikeJunk(name)) name = null;
+
+  const lines = textLines(card).filter((l) => l !== name);
+  if (!name && lines.length) name = lines[0];
+
+  const industry = lines.find((l) => l !== name && !FOLLOWERS.test(l) && l.length > 3) || null;
+
+  let photo = null;
+  const imgs = Array.from(card.querySelectorAll('img[src*="licdn.com"]')).map((i) => i.src);
+  photo = imgs.find((src) => /company-logo/i.test(src)) || imgs[0] || null;
+
+  return { name: name || null, industry, location: null, size: null, about: null, photo };
+}
+
 function extractFromCard(anchor) {
   const card = findCard(anchor);
 
@@ -355,6 +517,34 @@ function mergeInfo(primary, fallback) {
   return out;
 }
 
+function onOwnCompanyPage(slug) {
+  const here = targetFrom(location.href);
+  return Boolean(here && here.kind === "company" && here.slug === slug);
+}
+
+function buildCompanyRecord(anchor, slug) {
+  const onPage = onOwnCompanyPage(slug);
+  let info = onPage ? extractCompanyFromPage() : extractCompanyFromCard(anchor);
+  if (onPage && !info.name) info = mergeInfo(info, extractCompanyFromCard(anchor));
+
+  return {
+    slug,
+    url: companyUrl(slug),
+    name: info.name || slug.replace(/-\d{4,}$/, "").replace(/-/g, " "),
+    industry: info.industry || null,
+    location: info.location || null,
+    size: info.size || null,
+    about: info.about || null,
+    photo: info.photo || null,
+    savedAt: todayDMY(),
+    savedTs: Date.now(),
+    source: sourceFromLocation(),
+    tags: [],
+    note: "",
+    status: "to-message"
+  };
+}
+
 function buildRecord(anchor, slug) {
   const onProfile = onOwnProfilePage(slug);
   let info = onProfile ? extractFromProfilePage() : extractFromCard(anchor);
@@ -409,30 +599,49 @@ function ensureButton() {
   return btn;
 }
 
-function paintButton(slug) {
-  const saved = savedSlugs.has(slug);
+function paintButton(target) {
+  const saved = savedKeys.has(idOf(target.kind, target.slug));
+  const noun = target.kind === "company" ? "company" : "person";
   btn.innerHTML = saved ? ICON_DONE : ICON_ADD;
   btn.classList.toggle("lib-saved", saved);
-  btn.title = saved ? "Saved. Click to remove" : "Save to bookmarks";
+  btn.classList.toggle("lib-company", target.kind === "company");
+  btn.title = saved ? "Saved. Click to remove" : "Save this " + noun;
 }
+
+/* Height of LinkedIn's fixed bar at the very top of the window. Their search
+ * box lives in there. Scrolling down a profile also slides a sticky header
+ * into that band showing the person's name as a link — and putting our button
+ * to the right of that name drops it straight onto the search box, so reaching
+ * for it opened LinkedIn's search instead. */
+const TOP_BAR = 64;
 
 function positionButton(anchor) {
   const r = anchor.getBoundingClientRect();
   if (!r.width && !r.height) return false;
-  const top = window.scrollY + r.top + r.height / 2 - 13;
-  const left = window.scrollX + r.right + 6;
-  const maxLeft = window.scrollX + document.documentElement.clientWidth - 34;
-  btn.style.top = top + "px";
-  btn.style.left = Math.min(left, maxLeft) + "px";
+
+  // Position in window coordinates first, so we can reason about what else is
+  // on screen, then convert to page coordinates at the end.
+  let top = r.top + r.height / 2 - 13;
+  let left = r.right + 6;
+
+  if (top < TOP_BAR) {
+    // Sit under the link rather than beside it, clear of the top bar.
+    top = r.bottom + 6;
+    left = r.left;
+  }
+
+  const maxLeft = document.documentElement.clientWidth - 34;
+  btn.style.top = window.scrollY + top + "px";
+  btn.style.left = window.scrollX + Math.max(0, Math.min(left, maxLeft)) + "px";
   return true;
 }
 
-function showFor(anchor, slug) {
+function showFor(anchor, target) {
   clearTimeout(hideTimer);
   ensureButton();
   activeAnchor = anchor;
-  activeSlug = slug;
-  paintButton(slug);
+  activeTarget = target;
+  paintButton(target);
   if (positionButton(anchor)) btn.classList.add("lib-visible");
 }
 
@@ -441,15 +650,16 @@ function scheduleHide() {
   hideTimer = setTimeout(() => {
     if (btn) btn.classList.remove("lib-visible");
     activeAnchor = null;
-    activeSlug = null;
+    activeTarget = null;
   }, 260);
 }
 
 async function onSaveClick(ev) {
   ev.preventDefault();
   ev.stopPropagation();
-  if (!activeAnchor || !activeSlug) return;
-  const slug = activeSlug;
+  if (!activeAnchor || !activeTarget) return;
+  const target = activeTarget;
+  const { kind, slug } = target;
 
   if (!contextAlive()) {
     showToast("Extension reloaded — refresh this page");
@@ -457,24 +667,30 @@ async function onSaveClick(ev) {
   }
 
   try {
-    if (savedSlugs.has(slug)) {
-      await removeOne(slug);
-      savedSlugs.delete(slug);
-      paintButton(slug);
+    if (savedKeys.has(idOf(kind, slug))) {
+      await removeOne(kind, slug);
+      savedKeys.delete(idOf(kind, slug));
+      paintButton(target);
       showToast("Removed from bookmarks");
       return;
     }
 
-    const record = buildRecord(activeAnchor, slug);
-    // Only speak up when a profile save came back with nothing useful. That
+    const record =
+      kind === "company" ? buildCompanyRecord(activeAnchor, slug) : buildRecord(activeAnchor, slug);
+
+    // Only speak up when a full-page save came back with nothing useful. That
     // means the page had not finished building its sections yet, or LinkedIn
     // has changed them again.
     if (record.source === "profile" && !record.position && !record.company && !record.education) {
       console.warn("[lib] saved, but job and school were empty — scroll the profile, then save again");
     }
-    await writeOne(record);
-    savedSlugs.add(slug);
-    paintButton(slug);
+    if (record.source === "company page" && !record.industry && !record.location && !record.size) {
+      console.warn("[lib] company saved, but its details were empty — scroll the page, then save again");
+    }
+
+    await writeOne(kind, record);
+    savedKeys.add(idOf(kind, slug));
+    paintButton(target);
     showToast("Saved " + record.name);
   } catch (err) {
     // Never fail silently again — a dead click with no explanation is the
@@ -504,24 +720,47 @@ function showToast(text) {
 
 /* ---------- wiring ---------- */
 
+/* The heading at the top of a profile or company page — the name itself.
+ * LinkedIn has moved this between h1 and h2 over time, so try both. */
+function pageHeading() {
+  return document.querySelector("main h1") || document.querySelector("main h2");
+}
+
 document.addEventListener(
   "mouseover",
   (ev) => {
     const target = ev.target;
     if (!(target instanceof Element)) return;
     if (target.id === BTN_ID || target.closest("#" + BTN_ID)) return;
-    const anchor = target.closest('a[href*="/in/"]');
-    if (!anchor) {
-      if (activeAnchor) scheduleHide();
+
+    const anchor = target.closest('a[href*="/in/"], a[href*="/company/"], a[href*="/school/"]');
+    if (anchor) {
+      const hit = targetFrom(anchor.getAttribute("href"));
+      if (!hit) return;
+      if (anchor === activeAnchor) {
+        clearTimeout(hideTimer);
+        return;
+      }
+      showFor(anchor, hit);
       return;
     }
-    const slug = slugFrom(anchor.getAttribute("href"));
-    if (!slug) return;
-    if (anchor === activeAnchor) {
-      clearTimeout(hideTimer);
+
+    /* A page never links to itself. On someone's own profile, and on a company
+     * page, there is no <a> pointing at the thing you are looking at — which
+     * is exactly where you most want to save it. So the page's own heading
+     * counts as a target too. */
+    const here = targetFrom(location.href);
+    const heading = here && pageHeading();
+    if (heading && (heading === target || heading.contains(target))) {
+      if (heading === activeAnchor) {
+        clearTimeout(hideTimer);
+        return;
+      }
+      showFor(heading, here);
       return;
     }
-    showFor(anchor, slug);
+
+    if (activeAnchor) scheduleHide();
   },
   true
 );
@@ -541,10 +780,12 @@ document.addEventListener("keydown", (ev) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[STORE_KEY]) {
-    savedSlugs = new Set(Object.keys(changes[STORE_KEY].newValue || {}));
-    if (activeSlug) paintButton(activeSlug);
-  }
+  if (area !== "local") return;
+  if (!changes[PEOPLE_KEY] && !changes[COMPANY_KEY]) return;
+  // Either list changed, so rebuild both rather than trying to patch one.
+  refreshSavedSet().then(() => {
+    if (activeTarget) paintButton(activeTarget);
+  });
 });
 
 /* ---------- self-healing ----------
@@ -565,10 +806,11 @@ async function healCurrentProfile(attempt) {
   // after the extension was reloaded underneath us.
   if (!contextAlive()) return shutdown();
 
-  const slug = slugFrom(location.href);
-  if (!slug) return;
+  const here = targetFrom(location.href);
+  if (!here) return;
+  const { kind, slug } = here;
 
-  const existing = (await readAll())[slug];
+  const existing = (await readAll(kind))[slug];
   if (!existing) return; // not saved: nothing to upgrade
 
   // A soft navigation swaps the URL before the new page has rendered. Check
@@ -581,14 +823,13 @@ async function healCurrentProfile(attempt) {
     return;
   }
 
-  const info = extractFromProfilePage();
+  const info = kind === "company" ? extractCompanyFromPage() : extractFromProfilePage();
   const worthWriting =
-    ["name", "headline", "position", "company", "education"].some(
-      (k) => info[k] && info[k] !== existing[k]
-    ) || (info.photo && photoBase(info.photo) !== photoBase(existing.photo));
+    SCRAPED[kind].some((k) => k !== "photo" && info[k] && info[k] !== existing[k]) ||
+    (info.photo && photoBase(info.photo) !== photoBase(existing.photo));
   if (!worthWriting) return;
 
-  await writeOne({ slug, url: profileUrl(slug), ...info });
+  await writeOne(kind, { slug, url: urlFor(kind, slug), ...info });
 }
 
 /* Two passes. The first catches the top card as soon as it renders; the second

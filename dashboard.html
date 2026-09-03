@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LinkedIn Bookmarks</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <header class="top" id="top">
+      <div class="bar">
+        <h1>Saved people</h1>
+        <div class="spacer"></div>
+        <button id="export-csv" class="btn" title="Download what you can currently see, as CSV">CSV</button>
+        <button id="export-json" class="btn" title="Download what you can currently see, as JSON">JSON</button>
+        <button id="import" class="btn primary" title="Restore from a JSON backup. Nothing already filled in is overwritten.">Import</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden />
+      </div>
+
+      <p class="report" id="report" hidden></p>
+
+      <div class="tabs" id="tabs"></div>
+      <div class="tiles" id="tiles"></div>
+
+      <div class="controls">
+        <input
+          id="search"
+          type="search"
+          placeholder="Search name, position, company, school, note or tag"
+          autocomplete="off"
+        />
+        <div class="chips" id="tag-chips"></div>
+      </div>
+    </header>
+
+    <main>
+      <div class="table-wrap">
+        <table>
+          <thead id="head"></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="empty" hidden></p>
+    </main>
+
+    <footer class="foot">
+      Click the coloured stripe to change status. Click a tag or note to edit it. Click a name to open
+      the profile.
+    </footer>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

@@ -1,0 +1,529 @@
+/* Same palette as the side panel, so the two feel like one product. */
+:root {
+  --paper: #ffffff;
+  --shell: #f6f5f2;
+  --line: #e4e2dc;
+  --line-strong: #cfccc4;
+  --ink: #21201d;
+  --ink-2: #5f5d57;
+  --ink-3: #8f8d86;
+  --accent: #4b46a8;
+  --accent-bg: #efeef9;
+  --amber: #c9821a;
+  --green: #4f8a2b;
+  --gray-dot: #a8a59d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1c1b19;
+    --shell: #141312;
+    --line: #33312d;
+    --line-strong: #47443f;
+    --ink: #edebe6;
+    --ink-2: #a4a19a;
+    --ink-3: #7a776f;
+    --accent: #a49fea;
+    --accent-bg: #2a2745;
+    --amber: #d9a04b;
+    --green: #86b95f;
+    --gray-dot: #6b6862;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* The page is a fixed-height column: header, then a table that scrolls inside
+ * itself, then the footer. The page itself never scrolls. This is what makes
+ * the sticky column titles behave — they stick to a real scrolling box rather
+ * than to a page whose height keeps changing. */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--shell);
+  color: var(--ink);
+  font: 400 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---------- header ---------- */
+
+.top {
+  flex: 0 0 auto;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 24px 14px;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.btn {
+  font: 500 11px/1 inherit;
+  letter-spacing: 0.04em;
+  padding: 7px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.report {
+  margin: 0 0 12px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.report.bad {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+/* ---------- stat tiles double as the status filter ---------- */
+
+/* ---------- People / Companies tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 8px 14px 9px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--ink-2);
+}
+
+.tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-count {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tile {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 14px;
+  min-width: 116px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--shell);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.tile:hover {
+  border-color: var(--line-strong);
+}
+
+.tile.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.tile .n {
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.tile.on .n {
+  color: var(--accent);
+}
+
+.tile .k {
+  font-size: 11.5px;
+}
+
+.tile .swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.tile[data-status="to-message"] .swatch { background: var(--gray-dot); }
+.tile[data-status="messaged"] .swatch { background: var(--amber); }
+.tile[data-status="replied"] .swatch { background: var(--green); }
+
+/* ---------- controls ---------- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#search {
+  flex: 0 1 380px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--shell);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  outline: none;
+}
+
+#search:focus {
+  border-color: var(--accent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip.on {
+  background: var(--accent-bg);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+/* ---------- table ---------- */
+
+main {
+  flex: 1 1 auto;
+  min-height: 0; /* lets the scrolling box below actually shrink */
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 12px;
+}
+
+.table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 900px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Sticks to the top of .table-wrap, which is the box that actually scrolls. */
+th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  box-shadow: inset 0 -1px 0 var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--accent);
+}
+
+th .arrow {
+  margin-left: 5px;
+  opacity: 0.85;
+}
+
+tbody tr:hover {
+  background: var(--shell);
+}
+
+/* ---------- status stripe, same idea as the side panel ---------- */
+
+.stripe-head,
+.stripe-cell {
+  width: 12px;
+  padding: 0;
+}
+
+.stripe-cell {
+  position: relative;
+}
+
+/* 12px wide so it is easy to hit, but padding plus background-clip mean only
+ * 4px of colour shows. */
+.stripe {
+  position: absolute;
+  inset: 0;
+  width: 12px;
+  padding: 0 8px 0 0;
+  border: none;
+  border-radius: 0;
+  background-clip: content-box;
+  cursor: pointer;
+}
+
+.stripe:hover {
+  opacity: 0.7;
+}
+
+.stripe[data-status="to-message"] { background-color: var(--gray-dot); }
+.stripe[data-status="messaged"] { background-color: var(--amber); }
+.stripe[data-status="replied"] { background-color: var(--green); }
+
+/* ---------- editing in place ---------- */
+
+td.editable {
+  cursor: text;
+}
+
+td.editable:hover {
+  background: var(--accent-bg);
+}
+
+.cell-input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.actions-head,
+.actions-cell {
+  width: 44px;
+  text-align: right;
+}
+
+.mini {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 20px;
+  opacity: 0;
+}
+
+tr:hover .mini {
+  opacity: 1;
+}
+
+.mini.danger:hover {
+  color: #b4432c;
+  border-color: #b4432c;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mini.danger:hover {
+    color: #e0806a;
+    border-color: #e0806a;
+  }
+}
+
+/* ---------- cells ---------- */
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 190px;
+  cursor: pointer;
+}
+
+.person:hover .name {
+  color: var(--accent);
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Company logos are square artwork; a circle crops them badly. */
+.avatar.square {
+  border-radius: 6px;
+  object-fit: contain;
+  background: var(--shell);
+}
+
+.name {
+  font-weight: 500;
+}
+
+.sub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+
+.cell-muted {
+  color: var(--ink-2);
+}
+
+.dash {
+  color: var(--ink-3);
+}
+
+.tag {
+  display: inline-block;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  margin: 0 3px 3px 0;
+  border-radius: 20px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* Your own writing, in the accent colour, like the tags. Grey is everything
+ * LinkedIn told us; colour is everything you added. */
+.note-cell {
+  max-width: 260px;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.note-cell .dash {
+  color: var(--ink-3);
+}
+
+.when {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- misc ---------- */
+
+.empty {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.foot {
+  flex: 0 0 auto;
+  padding: 10px 24px 16px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
