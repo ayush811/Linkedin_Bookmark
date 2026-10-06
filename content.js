@@ -246,17 +246,41 @@ function sectionEntries(sectionId, heading) {
   return lines;
 }
 
-/* Prefer an actual headshot. A profile page also contains the wide background
- * banner, which is what got saved for Linda G. before this check existed. */
-function profilePhoto() {
-  const imgs = Array.from(document.querySelectorAll('main img[src*="licdn.com"]'))
-    .map((i) => i.src)
-    .filter((src) => src && !/ghost|anonymous/i.test(src));
-  return (
-    imgs.find((src) => /displayphoto/i.test(src)) ||
-    imgs.find((src) => !/displaybackgroundimage/i.test(src)) ||
-    null
+/* Pick this person's own photo, and nobody else's.
+ *
+ * A profile page is full of other people's faces: mutual connections, the
+ * "people also viewed" rail, and everyone who commented on their posts.
+ * Searching the whole page took whichever appeared first in the markup, which
+ * on some profiles is a stranger.
+ *
+ * Two safeguards. Look only inside the top card, and prefer the image LinkedIn
+ * labelled with their name. If neither is convincing, save no photo at all —
+ * the initials circle is better than the wrong face. */
+function profilePhoto(topCard, name) {
+  const root = topCard || document.querySelector("main");
+  if (!root) return null;
+
+  const imgs = Array.from(root.querySelectorAll('img[src*="licdn.com"]')).filter(
+    (i) =>
+      i.src &&
+      !/ghost|anonymous/i.test(i.src) &&
+      !/displaybackgroundimage/i.test(i.src) // the wide banner, not a headshot
   );
+
+  // LinkedIn puts the person's name in the alt text of their own photo.
+  const firstName = (name || "").trim().split(/\s+/)[0];
+  if (firstName) {
+    const mine = imgs.find((i) => (i.alt || "").toLowerCase().includes(firstName.toLowerCase()));
+    if (mine) return mine.src;
+  }
+
+  // No name match. Only trust a headshot if we were given the top card to
+  // search; anywhere else on the page it could belong to anyone.
+  if (topCard) {
+    const shot = imgs.find((i) => /displayphoto/i.test(i.src));
+    if (shot) return shot.src;
+  }
+  return null;
 }
 
 /* "May 2026 - Present · 4 mos" and friends, so a date line is never mistaken
@@ -275,7 +299,8 @@ function extractFromProfilePage() {
   // LinkedIn no longer puts the name in an h1 — it is the first h2 of the top
   // card. Try h1 anyway for older layouts, then fall back to the page title.
   const nameEl = document.querySelector("main h1") || document.querySelector("main h2");
-  const topLines = textLines(nameEl && nameEl.closest("section"));
+  const topCard = nameEl && nameEl.closest("section");
+  const topLines = textLines(topCard);
 
   let name = cleanLine(nameEl && nameEl.innerText) || topLines[0] || null;
   if (!name) name = cleanLine((document.title || "").split("|")[0].split(" - ")[0]) || null;
@@ -330,7 +355,7 @@ function extractFromProfilePage() {
     position,
     company,
     education,
-    photo: profilePhoto()
+    photo: profilePhoto(topCard, name)
   };
 }
 
@@ -372,16 +397,34 @@ function metaWithoutCounts(line) {
   ).replace(/[·•|]\s*$/, "").trim();
 }
 
-function companyLogo() {
-  const imgs = Array.from(document.querySelectorAll('main img[src*="licdn.com"]'))
-    .map((i) => i.src)
-    .filter((src) => src && !/ghost|anonymous/i.test(src));
-  return imgs.find((src) => /company-logo/i.test(src)) || imgs[0] || null;
+/* Same trap as profile photos: a company page shows logos for similar pages
+ * and for people who work there. Stay inside the top card and prefer the logo
+ * labelled with the company's name. */
+function companyLogo(topCard, name) {
+  const root = topCard || document.querySelector("main");
+  if (!root) return null;
+
+  const imgs = Array.from(root.querySelectorAll('img[src*="licdn.com"]')).filter(
+    (i) => i.src && !/ghost|anonymous/i.test(i.src) && !/displaybackgroundimage/i.test(i.src)
+  );
+
+  const firstWord = (name || "").trim().split(/\s+/)[0];
+  if (firstWord) {
+    const mine = imgs.find((i) => (i.alt || "").toLowerCase().includes(firstWord.toLowerCase()));
+    if (mine) return mine.src;
+  }
+
+  if (topCard) {
+    const logo = imgs.find((i) => /company-logo/i.test(i.src));
+    if (logo) return logo.src;
+  }
+  return null;
 }
 
 function extractCompanyFromPage() {
   const nameEl = document.querySelector("main h1") || document.querySelector("main h2");
-  const lines = textLines(nameEl && nameEl.closest("section"));
+  const topCard = nameEl && nameEl.closest("section");
+  const lines = textLines(topCard);
 
   let name = cleanLine(nameEl && nameEl.innerText) || lines[0] || null;
   if (!name) name = cleanLine((document.title || "").split("|")[0].split(" - ")[0]) || null;
@@ -427,7 +470,7 @@ function extractCompanyFromPage() {
       ) || null;
   }
 
-  return { name, industry, location: where, size, about, photo: companyLogo() };
+  return { name, industry, location: where, size, about, photo: companyLogo(topCard, name) };
 }
 
 function extractCompanyFromCard(anchor) {
