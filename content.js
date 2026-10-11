@@ -150,6 +150,18 @@ function companyUrl(slug) {
 
 const urlFor = (kind, slug) => (kind === "company" ? companyUrl(slug) : profileUrl(slug));
 
+/* Some companies have a second LinkedIn page just for recruiting: "yara-jobs"
+ * alongside "yara". A company saved from a job posting gets filed under the
+ * jobs slug, so later visiting the real company page looked for "yara", found
+ * nothing, and quietly gave up instead of repairing the record.
+ *
+ * Comparing slugs with these suffixes removed lets the two find each other. */
+function canonicalSlug(slug) {
+  return String(slug || "")
+    .toLowerCase()
+    .replace(/-(jobs|job|careers|career|life|talent|recruiting|hiring)$/, "");
+}
+
 /* ---------- data extraction ----------
  * Everything below is heuristic. LinkedIn class names rotate, so we lean on
  * structure (anchor -> nearest container that holds an image and some text)
@@ -473,24 +485,45 @@ function extractCompanyFromPage() {
   return { name, industry, location: where, size, about, photo: companyLogo(topCard, name) };
 }
 
+/* Wording that belongs to a job advert or to the page around it, never to a
+ * company. This is how one record ended up named "Take the next step in your
+ * job search" with an industry of "Hardware Program Manager". */
+const JOB_FURNITURE =
+  /(next step in your job search|jobs you may be interested|similar jobs|more jobs|people you may know|promoted|easy apply|save job|\d+\s*applicants?|be an early applicant|actively (reviewing|hiring)|view job|see all jobs)/i;
+
 function extractCompanyFromCard(anchor) {
   const card = findCard(anchor);
+
+  /* Only the link itself is trusted for the name. Anything else in the
+   * surrounding card might be describing the job, not the employer. The logo's
+   * own description is a good last resort, because LinkedIn puts the company
+   * name in it. */
   let name =
     cleanLine(anchor.querySelector('span[aria-hidden="true"]')?.innerText) ||
     cleanLine((anchor.innerText || "").split("\n")[0]) ||
-    cleanLine(anchor.getAttribute("aria-label"));
-  if (looksLikeJunk(name)) name = null;
+    cleanLine(anchor.getAttribute("aria-label")) ||
+    cleanLine((anchor.querySelector("img") || {}).alt);
+  if (looksLikeJunk(name) || JOB_FURNITURE.test(name || "")) name = null;
 
-  const lines = textLines(card).filter((l) => l !== name);
-  if (!name && lines.length) name = lines[0];
+  const lines = textLines(card).filter((l) => l !== name && !JOB_FURNITURE.test(l));
 
-  const industry = lines.find((l) => l !== name && !FOLLOWERS.test(l) && l.length > 3) || null;
+  /* A genuine company card always carries a follower or employee count. With
+   * no count there is no way to tell an industry from a job title, so leave
+   * the details blank. A blank repairs itself the moment you open the company
+   * page; a wrong guess sits there looking correct. */
+  const isCompanyCard = lines.some((l) => FOLLOWERS.test(l) || EMPLOYEES.test(l));
+  const industry = isCompanyCard
+    ? lines.find((l) => !FOLLOWERS.test(l) && !EMPLOYEES.test(l) && l.length > 3) || null
+    : null;
+  const size = isCompanyCard ? sizeFromLine(lines.find((l) => SIZE_IN_LINE.test(l))) : null;
 
-  let photo = null;
-  const imgs = Array.from(card.querySelectorAll('img[src*="licdn.com"]')).map((i) => i.src);
-  photo = imgs.find((src) => /company-logo/i.test(src)) || imgs[0] || null;
+  // Only a real logo, never just the first picture lying around in the card.
+  const photo =
+    Array.from(card.querySelectorAll('img[src*="licdn.com"]'))
+      .map((i) => i.src)
+      .find((src) => /company-logo/i.test(src)) || null;
 
-  return { name: name || null, industry, location: null, size: null, about: null, photo };
+  return { name: name || null, industry, location: null, size, about: null, photo };
 }
 
 function extractFromCard(anchor) {
@@ -573,7 +606,9 @@ function buildCompanyRecord(anchor, slug) {
   return {
     slug,
     url: companyUrl(slug),
-    name: info.name || slug.replace(/-\d{4,}$/, "").replace(/-/g, " "),
+    // Falling back to the slug, with any recruiting suffix dropped, so an
+    // unreadable card gives "yara" rather than "yara jobs".
+    name: info.name || canonicalSlug(slug).replace(/-\d{4,}$/, "").replace(/-/g, " "),
     industry: info.industry || null,
     location: info.location || null,
     size: info.size || null,
@@ -853,7 +888,18 @@ async function healCurrentProfile(attempt) {
   if (!here) return;
   const { kind, slug } = here;
 
-  const existing = (await readAll(kind))[slug];
+  /* Find the saved record for this page. Usually the slug matches exactly, but
+   * a company saved from a job posting is filed under its recruiting slug, so
+   * fall back to matching with those suffixes stripped. Without this, opening
+   * the real company page found nothing and silently left the bad record. */
+  const store = await readAll(kind);
+  let storedUnder = slug;
+  let existing = store[slug];
+  if (!existing && kind === "company") {
+    const want = canonicalSlug(slug);
+    storedUnder = Object.keys(store).find((k) => canonicalSlug(k) === want) || slug;
+    existing = store[storedUnder];
+  }
   if (!existing) return; // not saved: nothing to upgrade
 
   // A soft navigation swaps the URL before the new page has rendered. Check
@@ -872,7 +918,10 @@ async function healCurrentProfile(attempt) {
     (info.photo && photoBase(info.photo) !== photoBase(existing.photo));
   if (!worthWriting) return;
 
-  await writeOne(kind, { slug, url: urlFor(kind, slug), ...info });
+  /* Update the record where it already lives, so no duplicate appears — but
+   * point its link at the page we are actually on, which is the proper company
+   * page rather than the recruiting one. */
+  await writeOne(kind, { slug: storedUnder, url: urlFor(kind, slug), ...info });
 }
 
 /* Two passes. The first catches the top card as soon as it renders; the second
